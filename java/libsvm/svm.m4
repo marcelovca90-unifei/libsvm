@@ -162,18 +162,6 @@ abstract class Kernel extends QMatrix
         if(x_square != null) swap(double,x_square[i],x_square[j]);
     }
 
-    private static double powi(double base, int times)
-    {
-        double tmp = base, ret = 1.0;
-
-        for (int t = times; t > 0; t /= 2)
-        {
-            if (t % 2 == 1) ret *= tmp;
-            tmp = tmp * tmp;
-        }
-        return ret;
-    }
-
     double kernel_function(int i, int j)
     {
         switch (kernel_type)
@@ -181,7 +169,7 @@ abstract class Kernel extends QMatrix
             case svm_parameter.LINEAR:
                 return dot(x[i], x[j]);
             case svm_parameter.POLY:
-                return powi(gamma * dot(x[i], x[j]) + coef0, degree);
+                return Math.pow(gamma * dot(x[i], x[j]) + coef0, degree);
             case svm_parameter.RBF:
                 return Math.exp(-gamma * (x_square[i] + x_square[j] - 2 * dot(x[i], x[j])));
             case svm_parameter.SIGMOID:
@@ -242,7 +230,7 @@ abstract class Kernel extends QMatrix
             case svm_parameter.LINEAR:
                 return dot(x, y);
             case svm_parameter.POLY:
-                return powi(param.gamma * dot(x, y) + param.coef0, param.degree);
+                return Math.pow(param.gamma * dot(x, y) + param.coef0, param.degree);
             case svm_parameter.RBF:
             {
                 double sum = 0;
@@ -1194,8 +1182,10 @@ class SVC_Q extends Kernel
         int start, j;
         if ((start = cache.get_data(i, data, len)) < len)
         {
-            for (j = start; j < len; j++)
-                data[0][j] = (Qfloat) (y[i] * y[j] * kernel_function(i, j));
+						IntStream.range(start, len).parallel().forEach(p_j ->
+						{
+								data[0][p_j] = (Qfloat) (y[i] * y[p_j] * kernel_function(i, p_j));
+						});
         }
         return data[0];
     }
@@ -2391,8 +2381,10 @@ public class svm
             int l = model.l;
 
             double[] kvalue = new double[l];
-            for (i = 0; i < l; i++)
-                kvalue[i] = Kernel.k_function(x, model.SV[i], model.param);
+						IntStream.range(0, l).parallel().forEach(p_i ->
+            {
+                kvalue[p_i] = Kernel.k_function(x, model.SV[p_i], model.param);
+            });
 
             int[] start = new int[nr_class];
             start[0] = 0;
