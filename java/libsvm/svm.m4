@@ -1179,13 +1179,13 @@ class SVC_Q extends Kernel
     Qfloat[] get_Q(int i, int len)
     {
         Qfloat[][] data = new Qfloat[1][];
-        int start, j;
+        int start;
         if ((start = cache.get_data(i, data, len)) < len)
         {
-						IntStream.range(start, len).parallel().forEach(p_j ->
-						{
-								data[0][p_j] = (Qfloat) (y[i] * y[p_j] * kernel_function(i, p_j));
-						});
+            IntStream.range(start, len).parallel().forEach(p_j ->
+            {
+                data[0][p_j] = (Qfloat) (y[i] * y[p_j] * kernel_function(i, p_j));
+            });
         }
         return data[0];
     }
@@ -2381,7 +2381,7 @@ public class svm
             int l = model.l;
 
             double[] kvalue = new double[l];
-						IntStream.range(0, l).parallel().forEach(p_i ->
+            IntStream.range(0, l).parallel().forEach(p_i ->
             {
                 kvalue[p_i] = Kernel.k_function(x, model.SV[p_i], model.param);
             });
