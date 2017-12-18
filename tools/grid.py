@@ -351,7 +351,7 @@ def find_parameters(dataset_pathname, options=''):
 			stdout_str += 'g={0}, '.format(2.0**best_g)
 			output_str += 'log2g={0} '.format(g)
 		stdout_str += 'rate={0})'.format(best_rate)
-		# print(stdout_str)
+		print(stdout_str)
 		if options.out_pathname and not resumed:
 			output_str += 'rate={0}\n'.format(rate)
 			result_file.write(output_str)
@@ -445,8 +445,7 @@ def find_parameters(dataset_pathname, options=''):
 			redraw(db,[best_c, best_g, best_rate],gnuplot,options,True)
 
 
-	if options.out_pathname:
-		result_file.close()
+
 	job_queue.put((WorkerStopToken,None))
 	best_param, best_cg  = {}, []
 	if best_c != None:
@@ -455,6 +454,9 @@ def find_parameters(dataset_pathname, options=''):
 	if best_g != None:
 		best_param['g'] = 2.0**best_g
 		best_cg += [2.0**best_g]
+	if options.out_pathname:
+		result_file.write('best_c={0} best_g={1} best_rate={2}'.format(best_param['c'], best_param['g'], best_rate))
+		result_file.close()
 	print('{0} {1}'.format(' '.join(map(str,best_cg)), best_rate))
 
 	return best_rate, best_param
