@@ -21,9 +21,13 @@
  * SOFTWARE.
  ******************************************************************************/
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -36,65 +40,204 @@ public class Runner
 {
     public static void main(String[] args) throws Exception
     {
-        if (args.length == 0 || (!args[0].equals("prepare") && !args[0].equals("evaluate")))
+        if (args == null || args.length == 0)
+            args = new String[]
+            { "empty" };
+
+        switch (args[0])
         {
-            throw new Exception("usage: java -jar arff2libsvm.jar prepare|evaluate");
-        }
-        else if (args[0].equals("prepare"))
-        {
-            if (args.length != 5)
-                throw new Exception("usage: java -jar arff2libsvm.jar prepare arff_filename emptyHamCount emptySpamCount seed");
-
-            String arffFilename = args[1];
-            int emptyHamCount = Integer.parseInt(args[2]);
-            int emptySpamCount = Integer.parseInt(args[3]);
-            int seed = Integer.parseInt(args[4]);
-
-            String output = arffFilename.replace("data.arff", "data.unscaled");
-
-            StringBuilder sb = new StringBuilder();
-
-            List<String> dataset = new ArrayList<>();
-
-            Files.readAllLines(Paths.get(arffFilename)).stream().forEach(line ->
-            {
-                int y = line.endsWith("HAM") ? 1 : line.endsWith("SPAM") ? 2 : Integer.MIN_VALUE;
-
-                if (y != Integer.MIN_VALUE)
+            case "prepare":
+                if (args.length != 5)
+                    throw new Exception("usage: java -jar arff2libsvm.jar prepare arff_filename empty_ham_count empty_spam_count seed");
+                else
                 {
-                    String[] parts = line.split(",");
-
-                    sb.append(y);
-                    for (int i = 0; i < parts.length - 1; i++)
-                        sb.append(String.format(" %d:%s", i + 1, parts[i]));
-
-                    dataset.add(sb.toString());
-                    sb.setLength(0);
+                    System.out.println(LocalTime.now() + " prepare()");
+                    prepare(args);
                 }
-            });
+                break;
 
-            balance(dataset, seed);
-            shuffle(dataset, seed);
-            FileUtils.writeLines(new File(output), dataset);
+            case "scale":
+                if (args.length != 2)
+                    throw new Exception("usage: java -jar arff2libsvm.jar scale data_filename");
+                else
+                {
+                    System.out.println(LocalTime.now() + " scale()");
+                    scale(args);
+                }
+                break;
 
-            Pair<List<String>, List<String>> datasets = split(dataset, 0.5);
+            case "train":
+                if (args.length != 2)
+                    throw new Exception("usage: java -jar arff2libsvm.jar train training_set_file");
+                else
+                {
+                    System.out.println(LocalTime.now() + " train()");
+                    train(args);
+                }
+                break;
 
-            List<String> trainSet = datasets.getLeft();
-            FileUtils.writeLines(new File(output.replace("data.unscaled", "data.train.unscaled")), trainSet);
+            case "test":
+                if (args.length != 3)
+                    throw new Exception("usage: java -jar arff2libsvm.jar test test_file model_file");
+                else
+                {
+                    System.out.println(LocalTime.now() + " test()");
+                    test(args);
+                }
+                break;
 
-            List<String> testSet = datasets.getRight();
-            addEmpty(testSet, emptyHamCount, emptySpamCount);
-            FileUtils.writeLines(new File(output.replace("data.unscaled", "data.test.unscaled")), testSet);
+            case "evaluate":
+                if (args.length != 3)
+                    throw new Exception("usage: java -jar arff2libsvm.jar evaluate test_filename prediction_filename");
+                else
+                {
+                    System.out.println(LocalTime.now() + " evaluate()");
+                    evaluate(args);
+                }
+                break;
+
+            default:
+                throw new Exception("usage: java -jar arff2libsvm.jar prepare|evaluate");
         }
-        else if (args[0].equals("evaluate"))
+    }
+
+    private static void prepare(String[] args) throws Exception, IOException
+    {
+        String arffFilename = args[1];
+        int emptyHamCount = Integer.parseInt(args[2]);
+        int emptySpamCount = Integer.parseInt(args[3]);
+        int seed = Integer.parseInt(args[4]);
+
+        String output = arffFilename.replace("data.arff", "data.unscaled");
+
+        StringBuilder sb = new StringBuilder();
+
+        List<String> dataset = new ArrayList<>();
+
+        Files.readAllLines(Paths.get(arffFilename)).stream().forEach(line ->
         {
-            if (args.length != 3)
-                throw new Exception("usage: java -jar arff2libsvm.jar evaluate test_filename prediction_filename");
+            int y = line.endsWith("HAM") ? 1 : line.endsWith("SPAM") ? 2 : Integer.MIN_VALUE;
 
-            String testFilename = args[1];
-            String predictionFilename = args[2];
-            evaluate(testFilename, predictionFilename);
+            if (y != Integer.MIN_VALUE)
+            {
+                String[] parts = line.split(",");
+
+                sb.append(y);
+                for (int i = 0; i < parts.length - 1; i++)
+                    sb.append(String.format(" %d:%s", i + 1, parts[i]));
+
+                dataset.add(sb.toString());
+                sb.setLength(0);
+            }
+        });
+
+        balance(dataset, seed);
+        shuffle(dataset, seed);
+        FileUtils.writeLines(new File(output), dataset);
+
+        Pair<List<String>, List<String>> datasets = split(dataset, 0.5);
+
+        List<String> trainSet = datasets.getLeft();
+        FileUtils.writeLines(new File(output.replace("data.unscaled", "data.train.unscaled")), trainSet);
+
+        List<String> testSet = datasets.getRight();
+        addEmpty(testSet, emptyHamCount, emptySpamCount);
+        FileUtils.writeLines(new File(output.replace("data.unscaled", "data.test.unscaled")), testSet);
+    }
+
+    private static void scale(String[] args) throws IOException, InterruptedException
+    {
+        String data_filename = args[1];
+        String output_filename = data_filename.replaceAll(".unscaled", ".scaled");
+
+        String[] cmd = new String[] {
+                "/Users/marcelocysneiros/git/libsvm-marcelovca90/svm-scale",
+                "-l",
+                "0",
+                data_filename
+        };
+
+        run(cmd, output_filename);
+    }
+
+    private static void train(String[] args) throws IOException, InterruptedException
+    {
+        String training_set_file = args[1];
+        String model_file = training_set_file.replaceAll(".scaled", ".model");
+
+        String[] cmd = new String[] {
+                "/Users/marcelocysneiros/git/libsvm-marcelovca90/svm-train",
+                "-m",
+                "2048.0",
+                "-q",
+                training_set_file,
+                model_file
+        };
+
+        run(cmd, null);
+    }
+
+    private static void test(String[] args) throws IOException, InterruptedException
+    {
+        String test_file = args[1];
+        String model_file = args[2];
+        String output_file = test_file.replaceAll(".scaled", ".prediction");
+
+        String[] cmd = new String[] {
+                "/Users/marcelocysneiros/git/libsvm-marcelovca90/svm-predict",
+                test_file,
+                model_file,
+                output_file
+        };
+
+        run(cmd, null);
+    }
+
+    private static void run(String[] command, String outputFilename) throws IOException, InterruptedException
+    {
+        Process p;
+
+        if (outputFilename == null)
+            p = new ProcessBuilder(command).start();
+        else
+            p = new ProcessBuilder(command).redirectOutput(new File(outputFilename)).start();
+        p.waitFor();
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream())))
+        {
+            String line = "";
+            while ((line = reader.readLine()) != null)
+                System.out.println(line);
         }
+    }
+
+    private static void evaluate(String[] args) throws IOException, Exception
+    {
+        String testFilename = args[1];
+        String predictionFilename = args[2];
+
+        List<Integer> expected = Files
+            .readAllLines(Paths.get(testFilename))
+            .stream()
+            .map(line -> Character.getNumericValue(line.charAt(0)))
+            .collect(Collectors.toList());
+
+        List<Integer> predicted = Files
+            .readAllLines(Paths.get(predictionFilename))
+            .stream()
+            .map(line -> Character.getNumericValue(line.charAt(0)))
+            .collect(Collectors.toList());
+
+        if (expected.size() != predicted.size())
+            throw new Exception("expected.size() != predicted.size()");
+
+        int correct = 0;
+        for (int i = 0; i < expected.size(); i++)
+            if (expected.get(i) == predicted.get(i))
+                correct++;
+
+        double accuracy = 100.0 * (correct) / (expected.size());
+        System.out.println(String.format("Accuracy = %.4f%% (%d/%d) (%s)", accuracy, correct, expected.size(), "evaluation-java"));
     }
 
     private static void balance(List<String> dataset, int seed)
@@ -148,31 +291,5 @@ public class Runner
             testSet.add("1");
         for (int i = 0; i < emptySpamCount; i++)
             testSet.add("2");
-    }
-
-    private static void evaluate(String testFilename, String predictionFilename) throws Exception
-    {
-        List<Integer> expected = Files
-            .readAllLines(Paths.get(testFilename))
-            .stream()
-            .map(line -> Character.getNumericValue(line.charAt(0)))
-            .collect(Collectors.toList());
-
-        List<Integer> predicted = Files
-            .readAllLines(Paths.get(predictionFilename))
-            .stream()
-            .map(line -> Character.getNumericValue(line.charAt(0)))
-            .collect(Collectors.toList());
-
-        if (expected.size() != predicted.size())
-            throw new Exception("expected.size() != predicted.size()");
-
-        int correct = 0;
-        for (int i = 0; i < expected.size(); i++)
-            if (expected.get(i) == predicted.get(i))
-                correct++;
-
-        double accuracy = 100.0 * (correct) / (expected.size());
-        System.out.println(String.format("Accuracy = %.4f%% (%d/%d) (%s)", accuracy, correct, expected.size(), "evaluation-java"));
     }
 }
