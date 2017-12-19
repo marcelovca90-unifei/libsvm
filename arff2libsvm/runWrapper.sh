@@ -1,12 +1,12 @@
 #!/bin/bash
 
 CACHE=2048
-METADATA="/Users/marcelocysneiros/git/anti-spam-weka-data/2017_BASE2_ARFF/metadataUpTo1024.txt"
+METADATA="/home/marcelovca90/git/anti-spam-weka-data/2017_BASE2_ARFF/metadataUpTo1024.txt"
 PRIMES=(2)
 export OMP_NUM_THREADS=2
 
 while read p; do
-  BASE_FOLDER=$(echo $p | cut -d',' -f1 | sed -e "s/~/\/Users\/marcelocysneiros/g")
+  BASE_FOLDER=$(echo $p | cut -d',' -f1 | sed -e "s/~/\/home\/marcelovca90/g")
   EMPTY_HAM_COUNT=$(echo $p | cut -d',' -f2)
   EMPTY_SPAM_COUNT=$(echo $p | cut -d',' -f3)
   echo $(date +"%d-%m-%Y %H:%M:%S") $BASE_FOLDER

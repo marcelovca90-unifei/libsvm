@@ -38,6 +38,8 @@ import org.apache.commons.lang3.tuple.Pair;
 
 public class Runner
 {
+    private static final String USER_HOME = System.getProperty("user.home");
+
     public static void main(String[] args) throws Exception
     {
         if (args == null || args.length == 0)
@@ -47,53 +49,23 @@ public class Runner
         switch (args[0])
         {
             case "prepare":
-                if (args.length != 5)
-                    throw new Exception("usage: java -jar arff2libsvm.jar prepare arff_filename empty_ham_count empty_spam_count seed");
-                else
-                {
-                    System.out.println(LocalTime.now() + " prepare()");
-                    prepare(args);
-                }
+                prepare(args);
                 break;
 
             case "scale":
-                if (args.length != 2)
-                    throw new Exception("usage: java -jar arff2libsvm.jar scale data_filename");
-                else
-                {
-                    System.out.println(LocalTime.now() + " scale()");
-                    scale(args);
-                }
+                scale(args);
                 break;
 
             case "train":
-                if (args.length != 2)
-                    throw new Exception("usage: java -jar arff2libsvm.jar train training_set_file");
-                else
-                {
-                    System.out.println(LocalTime.now() + " train()");
-                    train(args);
-                }
+                train(args);
                 break;
 
             case "test":
-                if (args.length != 3)
-                    throw new Exception("usage: java -jar arff2libsvm.jar test test_file model_file");
-                else
-                {
-                    System.out.println(LocalTime.now() + " test()");
-                    test(args);
-                }
+                test(args);
                 break;
 
             case "evaluate":
-                if (args.length != 3)
-                    throw new Exception("usage: java -jar arff2libsvm.jar evaluate test_filename prediction_filename");
-                else
-                {
-                    System.out.println(LocalTime.now() + " evaluate()");
-                    evaluate(args);
-                }
+                evaluate(args);
                 break;
 
             default:
@@ -103,6 +75,11 @@ public class Runner
 
     private static void prepare(String[] args) throws Exception, IOException
     {
+        System.out.println(LocalTime.now() + " prepare()");
+
+        if (args.length != 5)
+            throw new Exception("usage: java -jar arff2libsvm.jar prepare arff_filename empty_ham_count empty_spam_count seed");
+
         String arffFilename = args[1];
         int emptyHamCount = Integer.parseInt(args[2]);
         int emptySpamCount = Integer.parseInt(args[3]);
@@ -114,8 +91,7 @@ public class Runner
 
         List<String> dataset = new ArrayList<>();
 
-        Files.readAllLines(Paths.get(arffFilename)).stream().forEach(line ->
-        {
+        Files.readAllLines(Paths.get(arffFilename)).stream().forEach(line -> {
             int y = line.endsWith("HAM") ? 1 : line.endsWith("SPAM") ? 2 : Integer.MIN_VALUE;
 
             if (y != Integer.MIN_VALUE)
@@ -145,13 +121,19 @@ public class Runner
         FileUtils.writeLines(new File(output.replace("data.unscaled", "data.test.unscaled")), testSet);
     }
 
-    private static void scale(String[] args) throws IOException, InterruptedException
+    private static void scale(String[] args) throws Exception
     {
+        System.out.println(LocalTime.now() + " scale()");
+
+        if (args.length != 2)
+            throw new Exception("usage: java -jar arff2libsvm.jar scale data_filename");
+
         String data_filename = args[1];
         String output_filename = data_filename.replaceAll(".unscaled", ".scaled");
 
-        String[] cmd = new String[] {
-                "/Users/marcelocysneiros/git/libsvm-marcelovca90/svm-scale",
+        String[] cmd = new String[]
+        {
+                USER_HOME + "/git/libsvm-marcelovca90/svm-scale",
                 "-l",
                 "0",
                 data_filename
@@ -160,13 +142,19 @@ public class Runner
         run(cmd, output_filename);
     }
 
-    private static void train(String[] args) throws IOException, InterruptedException
+    private static void train(String[] args) throws Exception
     {
+        System.out.println(LocalTime.now() + " train()");
+
+        if (args.length != 2)
+            throw new Exception("usage: java -jar arff2libsvm.jar train training_set_file");
+
         String training_set_file = args[1];
         String model_file = training_set_file.replaceAll(".scaled", ".model");
 
-        String[] cmd = new String[] {
-                "/Users/marcelocysneiros/git/libsvm-marcelovca90/svm-train",
+        String[] cmd = new String[]
+        {
+                USER_HOME + "/git/libsvm-marcelovca90/svm-train",
                 "-m",
                 "2048.0",
                 "-q",
@@ -177,20 +165,60 @@ public class Runner
         run(cmd, null);
     }
 
-    private static void test(String[] args) throws IOException, InterruptedException
+    private static void test(String[] args) throws Exception
     {
+        System.out.println(LocalTime.now() + " test()");
+
+        if (args.length != 3)
+            throw new Exception("usage: java -jar arff2libsvm.jar test test_file model_file");
+
         String test_file = args[1];
         String model_file = args[2];
         String output_file = test_file.replaceAll(".scaled", ".prediction");
 
-        String[] cmd = new String[] {
-                "/Users/marcelocysneiros/git/libsvm-marcelovca90/svm-predict",
+        String[] cmd = new String[]
+        {
+                USER_HOME + "/git/libsvm-marcelovca90/svm-predict",
                 test_file,
                 model_file,
                 output_file
         };
 
         run(cmd, null);
+    }
+
+    private static void evaluate(String[] args) throws Exception
+    {
+        System.out.println(LocalTime.now() + " evaluate()");
+
+        if (args.length != 3)
+            throw new Exception("usage: java -jar arff2libsvm.jar evaluate test_filename prediction_filename");
+
+        String testFilename = args[1];
+        String predictionFilename = args[2];
+
+        List<Integer> expected = Files
+                .readAllLines(Paths.get(testFilename))
+                .stream()
+                .map(line -> Character.getNumericValue(line.charAt(0)))
+                .collect(Collectors.toList());
+
+        List<Integer> predicted = Files
+                .readAllLines(Paths.get(predictionFilename))
+                .stream()
+                .map(line -> Character.getNumericValue(line.charAt(0)))
+                .collect(Collectors.toList());
+
+        if (expected.size() != predicted.size())
+            throw new Exception("expected.size() != predicted.size()");
+
+        int correct = 0;
+        for (int i = 0; i < expected.size(); i++)
+            if (expected.get(i) == predicted.get(i))
+                correct++;
+
+        double accuracy = 100.0 * (correct) / (expected.size());
+        System.out.println(String.format("Accuracy = %.4f%% (%d/%d) (%s)", accuracy, correct, expected.size(), "evaluation-java"));
     }
 
     private static void run(String[] command, String outputFilename) throws IOException, InterruptedException
@@ -209,35 +237,6 @@ public class Runner
             while ((line = reader.readLine()) != null)
                 System.out.println(line);
         }
-    }
-
-    private static void evaluate(String[] args) throws IOException, Exception
-    {
-        String testFilename = args[1];
-        String predictionFilename = args[2];
-
-        List<Integer> expected = Files
-            .readAllLines(Paths.get(testFilename))
-            .stream()
-            .map(line -> Character.getNumericValue(line.charAt(0)))
-            .collect(Collectors.toList());
-
-        List<Integer> predicted = Files
-            .readAllLines(Paths.get(predictionFilename))
-            .stream()
-            .map(line -> Character.getNumericValue(line.charAt(0)))
-            .collect(Collectors.toList());
-
-        if (expected.size() != predicted.size())
-            throw new Exception("expected.size() != predicted.size()");
-
-        int correct = 0;
-        for (int i = 0; i < expected.size(); i++)
-            if (expected.get(i) == predicted.get(i))
-                correct++;
-
-        double accuracy = 100.0 * (correct) / (expected.size());
-        System.out.println(String.format("Accuracy = %.4f%% (%d/%d) (%s)", accuracy, correct, expected.size(), "evaluation-java"));
     }
 
     private static void balance(List<String> dataset, int seed)
