@@ -9,7 +9,6 @@ while read p; do
   BASE_FOLDER=$(echo $p | cut -d',' -f1 | sed -e "s/~/\/home\/marcelovca90/g")
   EMPTY_HAM_COUNT=$(echo $p | cut -d',' -f2)
   EMPTY_SPAM_COUNT=$(echo $p | cut -d',' -f3)
-  echo $(date +"%d-%m-%Y %H:%M:%S") $BASE_FOLDER
 
   for SEED in "${PRIMES[@]}"
   do
@@ -24,7 +23,7 @@ while read p; do
       java -Xmx8G -Xms80m -jar ./arff2libsvm.jar train $BASE_FOLDER/data.train.scaled
 
       # test
-      java -Xmx8G -Xms80m -jar ./arff2libsvm.jar test $BASE_FOLDER/data.test.scaled $BASE_FOLDER/data.train.model
+      java -Xmx8G -Xms80m -jar ./arff2libsvm.jar test $BASE_FOLDER/data.test.scaled $BASE_FOLDER/data.train.model > /dev/null
 
       # evaluate
       java -Xmx8G -Xms80m -jar ./arff2libsvm.jar evaluate $BASE_FOLDER/data.test.scaled $BASE_FOLDER/data.test.prediction

@@ -27,6 +27,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,7 +35,10 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+
+import com.github.habernal.confusionmatrix.ConfusionMatrix;
 
 public class Runner
 {
@@ -75,8 +79,6 @@ public class Runner
 
     private static void prepare(String[] args) throws Exception, IOException
     {
-        System.out.println(LocalTime.now() + " prepare()");
-
         if (args.length != 5)
             throw new Exception("usage: java -jar arff2libsvm.jar prepare arff_filename empty_ham_count empty_spam_count seed");
 
@@ -123,8 +125,6 @@ public class Runner
 
     private static void scale(String[] args) throws Exception
     {
-        System.out.println(LocalTime.now() + " scale()");
-
         if (args.length != 2)
             throw new Exception("usage: java -jar arff2libsvm.jar scale data_filename");
 
@@ -144,8 +144,6 @@ public class Runner
 
     private static void train(String[] args) throws Exception
     {
-        System.out.println(LocalTime.now() + " train()");
-
         if (args.length != 2)
             throw new Exception("usage: java -jar arff2libsvm.jar train training_set_file");
 
@@ -167,8 +165,6 @@ public class Runner
 
     private static void test(String[] args) throws Exception
     {
-        System.out.println(LocalTime.now() + " test()");
-
         if (args.length != 3)
             throw new Exception("usage: java -jar arff2libsvm.jar test test_file model_file");
 
@@ -189,13 +185,13 @@ public class Runner
 
     private static void evaluate(String[] args) throws Exception
     {
-        System.out.println(LocalTime.now() + " evaluate()");
-
         if (args.length != 3)
             throw new Exception("usage: java -jar arff2libsvm.jar evaluate test_filename prediction_filename");
 
         String testFilename = args[1];
         String predictionFilename = args[2];
+        String shortFilename = testFilename.substring(testFilename.lastIndexOf("2017"));
+        shortFilename = shortFilename.substring(0, shortFilename.lastIndexOf(File.separator));
 
         List<Integer> expected = Files
                 .readAllLines(Paths.get(testFilename))
@@ -212,13 +208,43 @@ public class Runner
         if (expected.size() != predicted.size())
             throw new Exception("expected.size() != predicted.size()");
 
-        int correct = 0;
-        for (int i = 0; i < expected.size(); i++)
-            if (expected.get(i) == predicted.get(i))
-                correct++;
+        int ham_spam = 0, ham_ham = 0, spam_ham = 0, spam_spam = 0;
 
-        double accuracy = 100.0 * (correct) / (expected.size());
-        System.out.println(String.format("Accuracy = %.4f%% (%d/%d) (%s)", accuracy, correct, expected.size(), "evaluation-java"));
+        for (int i = 0; i < expected.size(); i++)
+        {
+            if (expected.get(i) == 1 && predicted.get(i) == 1)
+                ham_ham++;
+            if (expected.get(i) == 1 && predicted.get(i) == 2)
+                ham_spam++;
+            if (expected.get(i) == 2 && predicted.get(i) == 1)
+                spam_ham++;
+            if (expected.get(i) == 2 && predicted.get(i) == 2)
+                spam_spam++;
+        }
+
+        ConfusionMatrix cm = new ConfusionMatrix();
+
+        cm.increaseValue("ham", "ham", ham_ham);
+        cm.increaseValue("ham", "spam", ham_spam);
+        cm.increaseValue("spam", "ham", spam_ham);
+        cm.increaseValue("spam", "spam", spam_spam);
+
+        double fMeasure = 2.0 * (1.0 / ((1.0 / cm.getAvgRecall()) + (1.0 / cm.getAvgPrecision())));
+
+        System.out.println(
+                String.format("%s %s hamPrecision=%s spamPrecision=%s hamRecall=%s spamRecall=%s fMeasure=%s",
+                        LocalDate.now() + " " + LocalTime.now(),
+                        StringUtils.rightPad(shortFilename, 40),
+                        format(100.0 * cm.getPrecisionForLabel("ham")),
+                        format(100.0 * cm.getPrecisionForLabel("spam")),
+                        format(100.0 * cm.getRecallForLabel("ham")),
+                        format(100.0 * cm.getRecallForLabel("spam")),
+                        format(100.0 * fMeasure)));
+    }
+
+    private static String format(double v)
+    {
+        return StringUtils.rightPad(String.format("%.2f", v), 10);
     }
 
     private static void run(String[] command, String outputFilename) throws IOException, InterruptedException
