@@ -1,4 +1,3 @@
-
 /*******************************************************************************
  * Copyright (C) 2017 Marcelo Vinícius Cysneiros Aragão
  *
@@ -21,17 +20,23 @@
  * SOFTWARE.
  ******************************************************************************/
 
-import java.io.BufferedReader;
+package io.github.marcelovca90.main;
+
+import static io.github.marcelovca90.util.Utils.addEmpty;
+import static io.github.marcelovca90.util.Utils.balance;
+import static io.github.marcelovca90.util.Utils.format;
+import static io.github.marcelovca90.util.Utils.run;
+import static io.github.marcelovca90.util.Utils.shuffle;
+import static io.github.marcelovca90.util.Utils.split;
+
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
@@ -73,7 +78,7 @@ public class Runner
                 break;
 
             default:
-                throw new Exception("usage: java -jar arff2libsvm.jar prepare|evaluate");
+                throw new Exception("usage: java -jar arff2libsvm.jar prepare|scale|train|test|evaluate");
         }
     }
 
@@ -240,81 +245,5 @@ public class Runner
                         format(100.0 * cm.getRecallForLabel("ham")),
                         format(100.0 * cm.getRecallForLabel("spam")),
                         format(100.0 * fMeasure)));
-    }
-
-    private static String format(double v)
-    {
-        return StringUtils.rightPad(String.format("%.2f", v), 10);
-    }
-
-    private static void run(String[] command, String outputFilename) throws IOException, InterruptedException
-    {
-        Process p;
-
-        if (outputFilename == null)
-            p = new ProcessBuilder(command).start();
-        else
-            p = new ProcessBuilder(command).redirectOutput(new File(outputFilename)).start();
-        p.waitFor();
-
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream())))
-        {
-            String line = "";
-            while ((line = reader.readLine()) != null)
-                System.out.println(line);
-        }
-    }
-
-    private static void balance(List<String> dataset, int seed)
-    {
-        Random random = new Random(seed);
-
-        int hamCount = (int) dataset.stream().filter(i -> i.startsWith("1 ")).count();
-        int spamCount = (int) dataset.stream().filter(i -> i.startsWith("2 ")).count();
-
-        if (hamCount < spamCount)
-            for (int i = 0; i < spamCount - hamCount; i++)
-                dataset.add(dataset.get(random.nextInt(hamCount)));
-        else if (spamCount < hamCount)
-            for (int i = 0; i < hamCount - spamCount; i++)
-            dataset.add(dataset.get(hamCount + random.nextInt(spamCount)));
-    }
-
-    private static void shuffle(List<String> dataset, int seed)
-    {
-        Random random = new Random(seed);
-
-        int numberOfInstances = dataset.size();
-        for (int i = 0; i < numberOfInstances; i++)
-        {
-            int j = random.nextInt(numberOfInstances);
-            String a = dataset.get(i);
-            String b = dataset.get(j);
-            dataset.set(i, b);
-            dataset.set(j, a);
-        }
-    }
-
-    private static Pair<List<String>, List<String>> split(List<String> dataset, double splitPercent)
-    {
-        int numberOfInstances = dataset.size();
-
-        List<String> trainSet = new ArrayList<>();
-        for (int i = 0; i < (int) (splitPercent * numberOfInstances); i++)
-            trainSet.add(dataset.get(i));
-
-        List<String> testSet = new ArrayList<>();
-        for (int i = (int) (splitPercent * numberOfInstances); i < numberOfInstances; i++)
-            testSet.add(dataset.get(i));
-
-        return Pair.of(trainSet, testSet);
-    }
-
-    private static void addEmpty(List<String> testSet, int emptyHamCount, int emptySpamCount)
-    {
-        for (int i = 0; i < emptyHamCount; i++)
-            testSet.add("1");
-        for (int i = 0; i < emptySpamCount; i++)
-            testSet.add("2");
     }
 }
