@@ -23,8 +23,11 @@
 package io.github.marcelovca90.main;
 
 import static io.github.marcelovca90.util.Utils.addEmpty;
+import static io.github.marcelovca90.util.Utils.appendToFile;
 import static io.github.marcelovca90.util.Utils.balance;
-import static io.github.marcelovca90.util.Utils.format;
+import static io.github.marcelovca90.util.Utils.confidenceInterval;
+import static io.github.marcelovca90.util.Utils.formatMillis;
+import static io.github.marcelovca90.util.Utils.formatPercentage;
 import static io.github.marcelovca90.util.Utils.run;
 import static io.github.marcelovca90.util.Utils.shuffle;
 import static io.github.marcelovca90.util.Utils.split;
@@ -33,15 +36,16 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.time.LocalDate;
-import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 import com.github.habernal.confusionmatrix.ConfusionMatrix;
 
@@ -77,8 +81,12 @@ public class Runner
                 evaluate(args);
                 break;
 
+            case "aggregate":
+                aggregate(args);
+                break;
+
             default:
-                throw new Exception("usage: java -jar arff2libsvm.jar prepare|scale|train|test|evaluate");
+                throw new Exception("usage: java -jar arff2libsvm.jar prepare|scale|train|test|evaluate|aggregate");
         }
     }
 
@@ -134,7 +142,7 @@ public class Runner
             throw new Exception("usage: java -jar arff2libsvm.jar scale data_filename");
 
         String data_filename = args[1];
-        String output_filename = data_filename.replaceAll(".unscaled", ".scaled");
+        String output_filename = data_filename.replace(".unscaled", ".scaled");
 
         String[] cmd = new String[]
         {
@@ -153,7 +161,7 @@ public class Runner
             throw new Exception("usage: java -jar arff2libsvm.jar train training_set_file");
 
         String training_set_file = args[1];
-        String model_file = training_set_file.replaceAll(".scaled", ".model");
+        String model_file = training_set_file.replace(".train.scaled", ".model");
 
         String[] cmd = new String[]
         {
@@ -165,7 +173,10 @@ public class Runner
                 model_file
         };
 
-        run(cmd, null);
+        long execTime = run(cmd, null);
+
+        String execTimeFilename = training_set_file.replace(".train.scaled", ".train_times");
+        appendToFile(execTimeFilename, String.valueOf(execTime) + "\n");
     }
 
     private static void test(String[] args) throws Exception
@@ -175,7 +186,7 @@ public class Runner
 
         String test_file = args[1];
         String model_file = args[2];
-        String output_file = test_file.replaceAll(".scaled", ".prediction");
+        String output_file = test_file.replace(".test.scaled", ".prediction");
 
         String[] cmd = new String[]
         {
@@ -185,7 +196,10 @@ public class Runner
                 output_file
         };
 
-        run(cmd, null);
+        long execTime = run(cmd, null);
+
+        String execTimeFilename = test_file.replace(".test.scaled", ".test_times");
+        appendToFile(execTimeFilename, String.valueOf(execTime) + "\n");
     }
 
     private static void evaluate(String[] args) throws Exception
@@ -195,8 +209,6 @@ public class Runner
 
         String testFilename = args[1];
         String predictionFilename = args[2];
-        String shortFilename = testFilename.substring(testFilename.lastIndexOf("2017"));
-        shortFilename = shortFilename.substring(0, shortFilename.lastIndexOf(File.separator));
 
         List<Integer> expected = Files
                 .readAllLines(Paths.get(testFilename))
@@ -234,16 +246,64 @@ public class Runner
         cm.increaseValue("spam", "ham", spam_ham);
         cm.increaseValue("spam", "spam", spam_spam);
 
-        double fMeasure = 2.0 * (1.0 / ((1.0 / cm.getAvgRecall()) + (1.0 / cm.getAvgPrecision())));
+        double hamPrecision = 100.0 * cm.getPrecisionForLabel("ham");
+        double spamPrecision = 100.0 * cm.getPrecisionForLabel("spam");
+        double hamRecall = 100.0 * cm.getRecallForLabel("ham");
+        double spamRecall = 100.0 * cm.getRecallForLabel("spam");
+        double fMeasure = 100.0 * (2.0 * (1.0 / ((1.0 / cm.getAvgRecall()) + (1.0 / cm.getAvgPrecision()))));
+        String result = String.format("%f\t%f\t%f\t%f\t%f\n", hamPrecision, spamPrecision, hamRecall, spamRecall, fMeasure);
+
+        String outputFilename = predictionFilename.replace(".prediction", ".partial_results");
+        appendToFile(outputFilename, result);
+    }
+
+    private static void aggregate(String[] args) throws Exception
+    {
+        if (args.length != 4)
+            throw new Exception("usage: java -jar arff2libsvm.jar aggregate partial_results train_times test_times");
+
+        Map<String, DescriptiveStatistics> map = new HashMap<>();
+        map.put("hamPrecision", new DescriptiveStatistics());
+        map.put("spamPrecision", new DescriptiveStatistics());
+        map.put("hamRecall", new DescriptiveStatistics());
+        map.put("spamRecall", new DescriptiveStatistics());
+        map.put("fMeasure", new DescriptiveStatistics());
+        map.put("trainTime", new DescriptiveStatistics());
+        map.put("testTime", new DescriptiveStatistics());
+
+        String partialResultsFilename = args[1];
+        String trainTimesFilename = args[2];
+        String testTimesFilename = args[3];
+
+        Files.readAllLines(Paths.get(partialResultsFilename)).stream().forEach(line -> {
+
+            String[] parts = Arrays.stream(line.split("\t", -1)).map(i -> i.replace(',', '.')).toArray(String[]::new);
+            map.get("hamPrecision").addValue(Double.parseDouble(parts[0]));
+            map.get("spamPrecision").addValue(Double.parseDouble(parts[1]));
+            map.get("hamRecall").addValue(Double.parseDouble(parts[2]));
+            map.get("spamRecall").addValue(Double.parseDouble(parts[3]));
+            map.get("fMeasure").addValue(Double.parseDouble(parts[4]));
+        });
+
+        Files.readAllLines(Paths.get(trainTimesFilename)).stream()
+                .forEach(line -> map.get("trainTime").addValue(Long.parseLong(line)));
+
+        Files.readAllLines(Paths.get(testTimesFilename)).stream()
+                .forEach(line -> map.get("testTime").addValue(Long.parseLong(line)));
+
+        String shortFilename = partialResultsFilename.substring(partialResultsFilename.lastIndexOf("2017"));
+        shortFilename = shortFilename.substring(0, shortFilename.lastIndexOf(File.separator));
+        shortFilename = Arrays.stream(shortFilename.split(File.separator)).collect(Collectors.joining("\t"));
 
         System.out.println(
-                String.format("%s %s hamPrecision=%s spamPrecision=%s hamRecall=%s spamRecall=%s fMeasure=%s",
-                        LocalDate.now() + " " + LocalTime.now(),
-                        StringUtils.rightPad(shortFilename, 40),
-                        format(100.0 * cm.getPrecisionForLabel("ham")),
-                        format(100.0 * cm.getPrecisionForLabel("spam")),
-                        format(100.0 * cm.getRecallForLabel("ham")),
-                        format(100.0 * cm.getRecallForLabel("spam")),
-                        format(100.0 * fMeasure)));
+                String.format("%s\t%s ± %s\t%s ± %s\t%s ± %s\t%s ± %s\t%s ± %s\t%s ± %s\t%s ± %s",
+                        shortFilename,
+                        formatPercentage(map.get("hamPrecision").getMean()), formatPercentage(confidenceInterval(map.get("hamPrecision"))),
+                        formatPercentage(map.get("spamPrecision").getMean()), formatPercentage(confidenceInterval(map.get("spamPrecision"))),
+                        formatPercentage(map.get("hamRecall").getMean()), formatPercentage(confidenceInterval(map.get("hamRecall"))),
+                        formatPercentage(map.get("spamRecall").getMean()), formatPercentage(confidenceInterval(map.get("spamRecall"))),
+                        formatPercentage(map.get("fMeasure").getMean()), formatPercentage(confidenceInterval(map.get("fMeasure"))),
+                        formatMillis(map.get("trainTime").getMean()), formatMillis(confidenceInterval(map.get("trainTime"))),
+                        formatMillis(map.get("testTime").getMean()), formatMillis(confidenceInterval(map.get("testTime")))));
     }
 }

@@ -23,34 +23,42 @@
 package io.github.marcelovca90.util;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.time.DurationFormatUtils;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.math3.distribution.TDistribution;
+import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 
 public class Utils
 {
-    public static void run(String[] command, String outputFilename) throws IOException, InterruptedException
+    public static long run(String[] command, String outputFilename) throws IOException, InterruptedException
     {
-        Process p;
+        ProcessBuilder builder = new ProcessBuilder(command);
 
-        if (outputFilename == null)
-            p = new ProcessBuilder(command).start();
-        else
-            p = new ProcessBuilder(command).redirectOutput(new File(outputFilename)).start();
-        p.waitFor();
+        if (outputFilename != null)
+            builder = builder.redirectOutput(new File(outputFilename));
 
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream())))
+        long start = System.nanoTime();
+        Process process = builder.start();
+        process.waitFor();
+        long end = System.nanoTime();
+
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream())))
         {
             String line = "";
             while ((line = reader.readLine()) != null)
                 System.out.println(line);
         }
+
+        return (end - start) / 1000000L;
     }
 
     public static void balance(List<String> dataset, int seed)
@@ -106,8 +114,32 @@ public class Utils
             testSet.add("2");
     }
 
-    public static String format(double v)
+    public static double confidenceInterval(DescriptiveStatistics statistics)
     {
-        return StringUtils.rightPad(String.format("%.2f", v), 10);
+        if (statistics.getN() <= 1)
+            return 0.0;
+
+        TDistribution tDist = new TDistribution(statistics.getN() - 1);
+        double a = tDist.inverseCumulativeProbability(1.0 - 0.05 / 2);
+        return a * statistics.getStandardDeviation() / Math.sqrt(statistics.getN());
+    }
+
+    public static void appendToFile(String filename, String value) throws IOException
+    {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(new File(filename), true)))
+        {
+            writer.write(value);
+            writer.flush();
+        }
+    }
+
+    public static String formatPercentage(double v)
+    {
+        return String.format("%.2f", v);
+    }
+
+    public static String formatMillis(double millis)
+    {
+        return DurationFormatUtils.formatDurationHMS((Double.valueOf(Math.abs(millis))).longValue());
     }
 }
