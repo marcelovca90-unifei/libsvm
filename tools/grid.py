@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 __all__ = ['find_parameters']
 
-import os, sys, traceback, getpass, time, re
+import os, sys, traceback, getpass, time, re, datetime
 from threading import Thread
 from subprocess import *
 
@@ -351,7 +351,8 @@ def find_parameters(dataset_pathname, options=''):
 			stdout_str += 'g={0}, '.format(2.0**best_g)
 			output_str += 'log2g={0} '.format(g)
 		stdout_str += 'rate={0})'.format(best_rate)
-		print(stdout_str)
+		curr_time = datetime.datetime.now().strftime('%d-%m-%Y %H:%M:%S')
+		print('{0} {1}'.format(curr_time, stdout_str))
 		if options.out_pathname and not resumed:
 			output_str += 'rate={0}\n'.format(rate)
 			result_file.write(output_str)
